@@ -1,9 +1,16 @@
 -- Create the ScreenGui and Sprint Bar
 local player = game:GetService("Players")
 local LocalPlayer = player.LocalPlayer
+local Lighting = game:GetService("Lighting")
 local screenGui = Instance.new("ScreenGui")
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = LocalPlayer.PlayerGui
+
+-- Dynamic Blur Effect Setup
+local blurEffect = Lighting:FindFirstChild("StaminaBlur") or Instance.new("BlurEffect")
+blurEffect.Name = "StaminaBlur"
+blurEffect.Size = 0
+blurEffect.Parent = Lighting
 
 --------------------------------------------------------
 -- NEW STAMINA UI STRUCTURE (3 FRAMES)
@@ -78,23 +85,42 @@ local staminaRegenRate = 20
 local staminaDrainRate = 18
 local canSprint = true
 
+-- Pre-create exhaust sound
+local exhaustSound = Instance.new("Sound")
+exhaustSound.SoundId = "rbxassetid://88247479280853"
+exhaustSound.Volume = 1
+exhaustSound.Parent = LocalPlayer.Character or LocalPlayer:WaitForChild("PlayerGui")
+
 local function updateSprintBar()
-	sprintBar.Size = UDim2.new(currentStamina / maxStamina, 0, 1, 0)
+	local ratio = currentStamina / maxStamina
+	sprintBar.Size = UDim2.new(ratio, 0, 1, 0)
+	
+	-- Color transitions: Blue -> Yellow (< 50%) -> Red (< 25%)
+	if ratio <= 0.25 then
+		sprintBar.BackgroundColor3 = Color3.fromRGB(200, 50, 50) -- Red
+	elseif ratio <= 0.50 then
+		sprintBar.BackgroundColor3 = Color3.fromRGB(220, 180, 50) -- Yellow
+	else
+		sprintBar.BackgroundColor3 = Color3.fromRGB(71, 88, 185) -- Default Blue
+	end
 end
 
-local function updateDarkScreen()
-	if currentStamina < 100 then
+local function updateScreenEffects()
+	if currentStamina < maxStamina then
 		local percent = math.clamp(1 - (currentStamina / 70), 0, 1)
 		darkScreen.BackgroundTransparency = 1 - (percent * 0.4)
+		
+		-- Applies blur as stamina decreases (Max 12 blur size at 0 stamina)
+		blurEffect.Size = percent * 12
 	else
 		darkScreen.BackgroundTransparency = 1
+		blurEffect.Size = 0
 	end
 end
 
 local sprintButton = Instance.new("ImageButton")
 sprintButton.Size = UDim2.new(0.083, 0, 0.115, 0)
 sprintButton.Position = UDim2.new(0.916, 0, 0.369, 0)
--- Updated to the raw version of your requested GitHub image link
 sprintButton.Image = "https://raw.githubusercontent.com/reboundplayz/Doors-Fixed-Modes/main/sprint.png"
 sprintButton.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
 sprintButton.BackgroundTransparency = 1
@@ -118,6 +144,11 @@ sprintButton.MouseButton1Click:Connect(function()
 	end
 end)
 
+-- Keep sound parented properly if character respawns
+LocalPlayer.CharacterAdded:Connect(function(char)
+	exhaustSound.Parent = char
+end)
+
 local runService = game:GetService("RunService")
 
 runService.Heartbeat:Connect(function(dt)
@@ -132,6 +163,9 @@ runService.Heartbeat:Connect(function(dt)
 			if Character then
 				Character:SetAttribute("SpeedBoost", 0)
 			end
+			
+			-- Play exhaustion audio asset
+			exhaustSound:Play()
 
 			require(LocalPlayer.PlayerGui.MainUI.Initiator.Main_Game).caption("You're exhausted", true)
 		end
@@ -148,7 +182,7 @@ runService.Heartbeat:Connect(function(dt)
 	currentStamina = math.clamp(currentStamina, 0, maxStamina)
 
 	updateSprintBar()
-	updateDarkScreen()
+	updateScreenEffects()
 end)
 
 -- Display GitHub credit caption upon script execution
